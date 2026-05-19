@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 const SITE_NAME = process.env.SITE_NAME || 'EbookStore';
 /** Telegram for post-payment redirect (checkout success on this host). Videos-site passes Supabase user via ?telegram_username= when possible. */
@@ -92,6 +93,31 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   }
 });
+
+/** Public origin for legal pages (Railway/Render sit behind a reverse proxy). */
+function publicOrigin(req) {
+  const host = req.get('host') || '';
+  let proto = req.get('x-forwarded-proto');
+  if (proto) proto = String(proto).split(',')[0].trim();
+  else proto = req.protocol;
+  if (proto !== 'http' && proto !== 'https') proto = 'https';
+  return `${proto}://${host}`;
+}
+
+function sendLegalHtml(req, res, filename) {
+  try {
+    const origin = publicOrigin(req);
+    const html = readFileSync(path.join(__dirname, 'public', filename), 'utf8');
+    res.type('html').send(html.replaceAll('{{PUBLIC_ORIGIN}}', origin));
+  } catch (err) {
+    console.error('Legal page:', filename, err);
+    res.status(404).send('Not found');
+  }
+}
+
+for (const name of ['terms-of-service.html', 'privacy-policy.html', 'refund-policy.html']) {
+  app.get(`/${name}`, (req, res) => sendLegalHtml(req, res, name));
+}
 
 // Arquivos estáticos (CSS, imagens, etc.)
 app.use(express.static(path.join(__dirname, 'public')));

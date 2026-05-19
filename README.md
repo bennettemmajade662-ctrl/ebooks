@@ -34,6 +34,9 @@ O fluxo continua: o cliente sai do catálogo de vídeos e abre o checkout **nest
 ## Endpoints
 
 - `GET /` — Landing page com ebooks fictícios (e redireciona queries de checkout para `/api/paypal-checkout`)
+- `GET /terms-of-service.html` — Termos (Alpha Agency; URL público injetado no deploy)
+- `GET /privacy-policy.html` — Política de privacidade
+- `GET /refund-policy.html` — Política de reembolso
 - `GET /api/paypal-checkout?...&method=paypal|paddle` — PayPal in-page ou Paddle (transação via API + overlay Paddle.js)
 - `GET /api/paddle-checkout` — Atalho para o mesmo handler do Paddle
 - `GET /api/payjsr-checkout` — Legado: mesmo que Paddle (substitui PayJSR)
