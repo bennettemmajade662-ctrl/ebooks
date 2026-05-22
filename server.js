@@ -47,21 +47,21 @@ function resolveCheckoutParams(req) {
     telegram_username: q.telegram_username ? String(q.telegram_username) : '',
     display_title: q.display_title ? String(q.display_title) : '',
   };
-  const productLabel = q.display_title || q.product_name || 'Digital purchase';
+  const productLabel = q.product_name ? String(q.product_name) : 'Digital purchase';
 
   if (q.status === 'success' && (!success_url || !success_url.includes('status='))) {
     const base =
       success_url && /^https?:\/\//i.test(success_url) ? success_url.replace(/\/+$/, '') : origin;
-    success_url = getEbooksReturnUrl(base, 'success', q.product_name || productLabel, amount || q.amount, {
+    success_url = getEbooksReturnUrl(base, 'success', productLabel, amount || q.amount, {
       ...extra,
-      display_title: extra.display_title || productLabel,
+      display_title: extra.display_title || (q.display_title ? String(q.display_title) : ''),
     });
   }
 
   if (!success_url && amount) {
     success_url = getEbooksReturnUrl(origin, 'success', productLabel, amount, {
       ...extra,
-      display_title: productLabel,
+      display_title: extra.display_title || (q.display_title ? String(q.display_title) : ''),
     });
   }
 
@@ -365,7 +365,7 @@ async function handlePaddleCheckout(req, res) {
   applyCommonHeaders(res);
 
   const maskedForProcessor = product_name ? String(product_name).trim() : 'Digital Ebook';
-  const realForBuyer = display_title ? String(display_title).trim() : maskedForProcessor;
+  const realForBuyer = display_title ? String(display_title).trim() : '';
 
   const origin = `${req.protocol}://${req.get('host')}`;
   const extra = {
@@ -376,17 +376,18 @@ async function handlePaddleCheckout(req, res) {
   const fromStoreSuccess = sameOriginUrl(qSuccess, origin);
   const forwardSuccess = fromStoreSuccess
     ? fromStoreSuccess
-    : getEbooksReturnUrl(origin, 'success', realForBuyer, amountNumber.toFixed(2), extra);
+    : getEbooksReturnUrl(origin, 'success', maskedForProcessor, amountNumber.toFixed(2), {
+        ...extra,
+        display_title: realForBuyer || maskedForProcessor,
+      });
 
   const successIntermediate = `${origin}/api/paddle-success?forward=${encodeURIComponent(forwardSuccess)}`;
 
   const currencyRaw = String(currency || 'USD').toUpperCase();
   const currencyCode = /^[A-Z]{3}$/.test(currencyRaw) ? currencyRaw : 'USD';
 
-  const customData = {
-    storefront_title: realForBuyer.slice(0, 500),
-    masked_label: maskedForProcessor.slice(0, 500),
-  };
+  /** Paddle custom_data is visible in the vendor dashboard — never store the real product title. */
+  const customData = {};
   if (extra.video_id) customData.video_id = extra.video_id.slice(0, 200);
   if (extra.telegram_username) customData.telegram_username = extra.telegram_username.slice(0, 200);
 
@@ -450,7 +451,7 @@ async function handlePaddleCheckout(req, res) {
     transactionId,
     clientToken: paddleClientToken,
     jsEnvironment: paddleJsEnvironment(),
-    realTitle: realForBuyer,
+    realTitle: realForBuyer || maskedForProcessor,
     maskedLabel: maskedForProcessor,
     amountStr: amountNumber.toFixed(2),
     currencyCode,
@@ -485,6 +486,7 @@ function handlePayPalCheckout(req, res) {
   const currencyRaw = String(currency || 'USD').toUpperCase();
   const currencyCode = /^[A-Z]{3}$/.test(currencyRaw) ? currencyRaw : 'USD';
   const paypalScriptUrl = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(paypalClientId)}&currency=${encodeURIComponent(currencyCode)}`;
+  /** PayPal line item — must use masked product_name only, never display_title. */
   const paypalDescription = String(product_name || 'Digital Ebook').trim() || 'Digital Ebook';
   const displayTitleRaw = String(display_title || '').trim();
   const hasDisplayTitle = displayTitleRaw.length > 0;
